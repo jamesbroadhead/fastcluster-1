@@ -6,6 +6,12 @@ import sys
 #import distutils.debug
 #distutils.debug.DEBUG = 'yes'
 from setuptools import setup, Extension
+from setuptools.command.build_ext import build_ext as _build_ext
+
+## Config
+compile_args = [] # consider adding "GCC_WARNINGS" or "GCC_OPTIMISATIONS"
+gcc_linker_optimisations = False
+##
 
 if sys.hexversion < 0x03000000: # uniform unicode handling for both Python 2.x and 3.x
     def u(x):
@@ -32,23 +38,49 @@ with textfileopen('fastcluster.py') as f:
 
 print('Version: ' + version)
 
+def _get_extra_compile_args():
+    """
+    Feel free to add GCC_WARNINGS to compile_args if you use the GCC.
+    This switches to more aggressive optimization and turns
+     warning switches on. No warning should appear in
+    the compilation process.
 
-def get_include_dirs():
-    """ avoid importing numpy until here, so that users can run "setup.py install"
-    without having numpy installed yet """
-    def is_special_command():
-        special_list = ('--help-commands',
-                        'egg_info',
-                        '--version',
-                        'clean')
-        return ('--help' in sys.argv[1:] or
-                sys.argv[1] in special_list)
+     Also, the author's Python distribution generates debug
+    by default. This can be turned off, resulting a in
+    much smaller compiled library.
+    """
+    if os.name == 'nt':
+        return ['/EHsc']
 
-    if len(sys.argv) >= 2 and is_special_command():
-        return []
+    args = []
+    if "GCC_WARNINGS" in compile_args:
+        args.extend(['-Wall', '-Weffc++', '-Wextra', '-Wall', '-Wcast-align', '-Wchar-subscripts', '-Wcomment', '-Wconversion', '-Wsign-conversion', '-Wdisabled-optimization', '-Wfloat-equal', '-Wformat', '-Wformat=2', '-Wformat-nonliteral', '-Wformat-security', '-Wformat-y2k', '-Wimport', '-Winit-self', '-Winline', '-Winvalid-pch', '-Wunsafe-loop-optimizations', '-Wmissing-braces', '-Wmissing-field-initializers', '-Wmissing-format-attribute', '-Wmissing-include-dirs', '-Wmissing-noreturn', '-Wpacked', '-Wparentheses', '-Wpointer-arith', '-Wredundant-decls', '-Wreturn-type', '-Wsequence-point', '-Wshadow', '-Wsign-compare', '-Wstack-protector', '-Wstrict-aliasing', '-Wstrict-aliasing=2', '-Wswitch', '-Wswitch-enum', '-Wtrigraphs', '-Wuninitialized', '-Wunknown-pragmas', '-Wunreachable-code', '-Wunused', '-Wunused-function', '-Wunused-label', '-Wunused-parameter', '-Wunused-value', '-Wunused-variable', '-Wvariadic-macros', '-Wvolatile-register-var', '-Wwrite-strings', '-Wlong-long', '-Wpadded', '-Wcast-qual', '-Wswitch-default', '-Wnon-virtual-dtor', '-Wold-style-cast', '-Woverloaded-virtual', '-Waggregate-return', '-Werror'])
 
-    import numpy
-    return [numpy.get_include()]
+    if "GCC_OPTIMISATIONS" in compile_args:
+        args.extend(['-O2', '-g0', '-march=native', '-mtune=native', '-fno-math-errno'])
+
+    return args
+
+def _get_extra_link_args():
+    if gcc_linker_optimisations:
+        return ['-Wl,--strip-all']
+    return []
+
+class build_ext(_build_ext):
+
+    def finalize_options(self):
+        _build_ext.finalize_options(self)
+        import builtins
+        # prevent numpy from thinking it is still in its setup process:
+        try:
+            del builtins.__NUMPY_SETUP__
+        except AttributeError:
+            pass
+        import numpy
+        self.include_dirs.append(numpy.get_include())
+
+
+
 
 setup(name='fastcluster',
       version=version,
@@ -88,31 +120,13 @@ Clustering Routines for R and Python*, Journal of Statistical Software, **53**
 (2013), no. 9, 1–18, http://www.jstatsoft.org/v53/i09/.
 """),
       requires=['numpy'],
-      install_requires=["numpy>=1.9"],
+      install_requires=['numpy>=1.9'],
       setup_requires=['numpy'],
       provides=['fastcluster'],
-      ext_modules=[Extension('_fastcluster',
-                             ['src/fastcluster_python.cpp'],
-                             extra_compile_args=['/EHsc'] if os.name == 'nt' else [],
-                             include_dirs=get_include_dirs(),
-# Feel free to uncomment the line below if you use the GCC.
-# This switches to more aggressive optimization and turns
-# more warning switches on. No warning should appear in
-# the compilation process.
-#
-# Also, the author's Python distribution generates debug
-# symbols by default. This can be turned off, resulting a in
-# much smaller compiled library.
-#
-# Optimization
-#extra_compile_args=['-O2', '-g0', '-march=native', '-mtune=native', '-fno-math-errno'],
-#
-# List of all warning switches, somewhere from stackoverflow.com
-#extra_compile_args=['-Wall', '-Weffc++', '-Wextra', '-Wall', '-Wcast-align', '-Wchar-subscripts', '-Wcomment', '-Wconversion', '-Wsign-conversion', '-Wdisabled-optimization', '-Wfloat-equal', '-Wformat', '-Wformat=2', '-Wformat-nonliteral', '-Wformat-security', '-Wformat-y2k', '-Wimport', '-Winit-self', '-Winline', '-Winvalid-pch', '-Wunsafe-loop-optimizations', '-Wmissing-braces', '-Wmissing-field-initializers', '-Wmissing-format-attribute', '-Wmissing-include-dirs', '-Wmissing-noreturn', '-Wpacked', '-Wparentheses', '-Wpointer-arith', '-Wredundant-decls', '-Wreturn-type', '-Wsequence-point', '-Wshadow', '-Wsign-compare', '-Wstack-protector', '-Wstrict-aliasing', '-Wstrict-aliasing=2', '-Wswitch', '-Wswitch-enum', '-Wtrigraphs', '-Wuninitialized', '-Wunknown-pragmas', '-Wunreachable-code', '-Wunused', '-Wunused-function', '-Wunused-label', '-Wunused-parameter', '-Wunused-value', '-Wunused-variable', '-Wvariadic-macros', '-Wvolatile-register-var', '-Wwrite-strings', '-Wlong-long', '-Wpadded', '-Wcast-qual', '-Wswitch-default', '-Wnon-virtual-dtor', '-Wold-style-cast', '-Woverloaded-virtual', '-Waggregate-return', '-Werror'],
-#
-# Linker optimization
-#extra_link_args=['-Wl,--strip-all'],
-      )],
+      cmdclass={'build_ext': build_ext},
+      ext_modules=[Extension('_fastcluster', ['src/fastcluster_python.cpp'],
+            extra_compile_args=_get_extra_compile_args(),
+            extra_link_args=_get_extra_link_args())],
       keywords=['dendrogram', 'linkage', 'cluster', 'agglomerative',
                 'hierarchical', 'hierarchy', 'ward'],
       author=u("Daniel Müllner"),
